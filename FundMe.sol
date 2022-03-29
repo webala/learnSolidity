@@ -2,49 +2,27 @@
 
 pragma solidity >=0.6.0 < 0.9.0;
 
-interface AggregatorV3Interface {
-  function decimals() external view returns (uint8);
-
-  function description() external view returns (string memory);
-
-  function version() external view returns (uint256);
-
-  // getRoundData and latestRoundData should both raise "No data present"
-  // if they do not have data to report, instead of returning unset values
-  // which could be misinterpreted as actual reported values.
-  function getRoundData(uint80 _roundId)
-    external
-    view
-    returns (
-      uint80 roundId,
-      int256 answer,
-      uint256 startedAt,
-      uint256 updatedAt,
-      uint80 answeredInRound
-    );
-
-  function latestRoundData()
-    external
-    view
-    returns (
-      uint80 roundId,
-      int256 answer,
-      uint256 startedAt,
-      uint256 updatedAt,
-      uint80 answeredInRound
-    );
-}
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 
 contract FundMe {
     mapping(address=>uint256) public addressToAmountFunded;
+    address[] public funders;
+    address public owner;
+
+    constructor() public { //constructor is called automatically when the contract is deployed.
+      owner = msg.sender;
+    }
 
     function fund() public payable{
+        uint256 minimumUSD = 50 * 10 ** 18;
 
-        //msg.sender -> Sender of funds
+        require(getConversionRate(msg.value) >= minimumUSD, "You need to spend more EHT!");
+        //msg.sender -> Sender of funds or caller of function
         //msg.value -> Amount funded
         //Both are key words in solidity
         addressToAmountFunded[msg.sender] += msg.value;
+        funders.push(msg.sender);
     }
 
     function getVersion () public view returns(uint256) {
@@ -65,7 +43,7 @@ contract FundMe {
             //roe unused vaiables can be ignored like so
             //(,int256 answer,,,) = priceFeed.latestRoundData();
         
-        return uint256(answer); // type casting since return value is of uint256
+        return uint256(answer * 10000000000); // type casting since return value is of uint256
     }
 
     function getConversionRate(uint256 ethAmount) public view returns(uint256) {
@@ -73,6 +51,25 @@ contract FundMe {
         uint256 ethAmountInUsd = (ethAmount * ethPrice) / 1000000000000000000;
         return ethAmountInUsd;
     }
-
+ 
     //3332.49374413 -> the price has 8 decimals.
+
+
+    //Modifiers -> Used to change the behaviour of a function in a declarative way.
+    modifier onlyOwner {
+      require(msg.sender == owner);
+      _; //This means to run the code after the above lines
+    }
+
+    function withdraw () payable onlyOwner public {
+      uint256 amount = address(this).balance;
+      payable(msg.sender).transfer(amount); //transfer all funds to sender of function call
+
+      for (uint256 fundersIndex=0; fundersIndex<funders.length; fundersIndex++) {
+        address funder = funders[fundersIndex];
+        addressToAmountFunded[funder] = 0;
+      }
+
+      funders = new address[](0);
+    }
 }
